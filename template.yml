@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS SNS to Slack https://github.com/m-mizutani/sns-to-slack"
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  LambdaRoleArn:
+    Type: String
+    Default: ""
+  WebHookURL:
+    Type: String
+
+Conditions:
+  LambdaRoleRequired:
+    Fn::Equals: [ { Ref: LambdaRoleArn }, "" ]
+
+Outputs:
+  SNSTopicArn:
+    Description: Input SNS topic ARN
+    Value:
+      Ref: IncomingNotify
+
+Resources:
+  # --------------------------------------------------------
+  # Lambda functions
+  Forwarder:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: go1.x
+      CodeUri: build
+      Timeout: 30
+      MemorySize: 128
+      CodeUri: build
+      Handler: main
+      Role:
+        Fn::If: [ LambdaRoleRequired, {"Fn::GetAtt": LambdaRole.Arn}, {Ref: LambdaRoleArn} ]
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          WEBHOOK_URL:
+            Ref: WebHookURL
+      Events:
+        NotifyTopic:
+          Type: SNS
+          Properties:
+            Topic:
+              Ref: IncomingNotify
+
+  IncomingNotify:
+    Type: AWS::SNS::Topic
+
+  # --------------------------------------------------------
+  # IAM Roles
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Condition: LambdaRoleRequired
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: ["lambda.amazonaws.com"]
+            Action: ["sts:AssumeRole"]
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
